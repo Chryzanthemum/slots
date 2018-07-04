@@ -3,16 +3,12 @@
 <a href="https://twitter.com/acdlite/status/974390255393505280">
   <img alt="Blazing Fast" src="https://img.shields.io/badge/speed-blazing%20%F0%9F%94%A5-brightgreen.svg?style=flat-square">
 </a>
-
 <a href="https://github.com/ambv/black">
     <img alt="Code style black" src="https://img.shields.io/badge/code%20style-black-000000.svg">
 </a>
-
 <a>
     <img alt="Python Versions" src="https://img.shields.io/pypi/pyversions/Django.svg">
 </a>
-
-
 <a>
     <img alt="MIT License" src="https://img.shields.io/packagist/l/doctrine/orm.svg">
 </a>
