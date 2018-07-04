@@ -24,7 +24,7 @@ This project was forked from https://github.com/roycoding/slots. Thanks to Roy K
 
 [Benjamin Jiang](https://www.jiangmadethis.com) -- benjaminyjiang@gmail.com
 
-#### License: BSD
+#### License: MID
 See [LICENSE.txt](https://github.com/Chryzanthemum/slots/blob/master/LICENSE.txt)
 
 
