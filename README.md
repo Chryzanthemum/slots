@@ -1,7 +1,4 @@
 # slots
-### *A multi-armed bandit library for Python*
-
-Slots was intended to be a basic, very easy-to-use multi-armed bandit library for Python. It's currently growing into an unwieldly behemoth designed for use with multi-armed bandits in real world situations. All junk code and terrible jokes are courtesy of @Chryzanthemum.
 
 <a href="https://twitter.com/acdlite/status/974390255393505280">
   <img alt="Blazing Fast" src="https://img.shields.io/badge/speed-blazing%20%F0%9F%94%A5-brightgreen.svg?style=flat-square">
@@ -11,14 +8,28 @@ Slots was intended to be a basic, very easy-to-use multi-armed bandit library fo
     <img alt="Code style black" src="https://img.shields.io/badge/code%20style-black-000000.svg">
 </a>
 
-#### Author
+<a>
+    <img alt="Python Versions" src="https://img.shields.io/pypi/pyversions/Django.svg">
+</a>
+
+
+<a>
+    <img alt="MIT License" src="https://img.shields.io/packagist/l/doctrine/orm.svg">
+</a>
+
+
+### *A multi-armed bandit library for Python*
+
+Slots is a multi-armed bandit library for Python, applicable to real world historical testing situations. 
+This project was forked from https://github.com/roycoding/slots. Thanks to Roy Keyes for the initial idea and implementation
+
+#### Authors
 [Roy Keyes](https://roycoding.github.io) -- roy.coding@gmail
 
-#### Contributor
 [Benjamin Jiang](https://www.jiangmadethis.com) -- benjaminyjiang@gmail.com
 
 #### License: BSD
-See [LICENSE.txt](https://github.com/roycoding/slots/blob/master/LICENSE.txt)
+See [LICENSE.txt](https://github.com/Chryzanthemum/slots/blob/master/LICENSE.txt)
 
 
 ### Introduction
@@ -129,6 +140,8 @@ a = [1, 1 ,2]
 b = [3, 4, 1]
 e=pd.DataFrame({'a':a, 'b':b}) 
 
+s['mab'] = slots.MAB(4)
+
 s['mab'].multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy')
 
 {'best': 1, 'choice': 1, 'new_trial': False}
@@ -144,11 +157,36 @@ One problem with the simplified MAB implementation is that it doesn't account fo
 
 We add a 'step_size' parameter where applicable. If a step size is chosen, the minimum step size is the number of payouts iterated through so far. (If you look at the math, setting step size to number of payouts iterated through is the same thing as just taking the average.) To me, it makes no sense that a sliding step size designed to move the average around quickly would contribute less of a shift than simply averaging it in the beginning. 
 
+
+```Python
+
+a = [1, 1, 2, 1, 4, 1, 1]
+b = [3, 4, 1, 4, 2, 3, 3]
+e=pd.DataFrame({'a':a, 'b':b}) 
+
+s['mab'] = slots.MAB(4)
+s['mab'].multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy', step_size = 0.5)
+
+{'best': 1, 'choice': 1, 'new_trial': False}
+
+s['mab'].est_payouts(step_size = 0.5)
+
+{3.1875, 1, 0, 2}
+
+
+s['mab'].est_payouts()
+
+{3.4, 1, 0, 2}
+
+```
+    
+Honestly, this part is a little janky because you're specifying whether or not to use the step_size parameter each time instead of instantiating the MAB with a step_size. I liked the control, but you might not. 
+
 Currently Bayesian bandit doesn't support step size because I don't fully get the math behind it yet. 
 Regret seems complicated and I'm not sure how to calculate it with a non-stationary bandit.(https://arxiv.org/abs/1405.3316) Seriously, what is this garbage? I've spoken to the authors and this still doesn't make any sense. If you can do this math, hit my DM. 
 
 ### API documentation
-For documentation on the slots API, see [slots-docs.md](https://github.com/roycoding/slots/blob/master/docs/slots-docs.md).
+For documentation on the slots API, see [slots-docs.md](https://github.com/Chryzanthemum/slots/blob/master/docs/slots-docs.md).
 
 
 ### Todo list:
