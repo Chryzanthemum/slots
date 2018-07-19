@@ -208,7 +208,7 @@ class MAB(object):
 
         return np.array(p_success_arms).argmax()
 
-    def eps_greedy(self, params, step_size=None):
+    def eps_greedy(self, params, step_size=None, sliding_window=None):
         """
         Run the epsilon-greedy strategy and update self.max_mean()
 
@@ -218,13 +218,15 @@ class MAB(object):
             Epsilon
         step_size : None
             If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
-            
+        sliding_window : None
+            sliding_window just means that you're only using the last x results to do all future calculations. 
         Returns
         -------
         int
             Index of chosen bandit
         """
-
+        #I'm sure it's theoretically possible to overlap sliding window and step size but that seems like real math so...
+        if 
         if params and type(params) == dict:
             eps = params.get("epsilon")
         else:
@@ -308,6 +310,10 @@ class MAB(object):
             but it is ignored.
         step_size : None
             If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
+            NOTE THAT IN MY HUMBLE OPINION THEIR IMPLEMENTATION MAKES NO SENSE.
+            THE NUMBER OF PULLS WHICH LEADS TO CONFIDENCE BOUND ISNT LINEAR ANYMORE IF YOU'RE NOT WEIGHING EACH PULL EVENLY RIGHT?
+            Algorithm 2 in https://arxiv.org/pdf/0805.3415.pdf gives an equation for UCB with a step size but honestly that shit looks complicated.
+            It also has the classic "where sigma is some appropriate constant" which is like... okay? 
             
         Returns
         -------
@@ -326,6 +332,54 @@ class MAB(object):
             ubcs = payouts + np.sqrt(2 * np.log(n_tot) / self.pulls)
 
             return np.argmax(ubcs)
+        
+    def ucbtuned(self, params=None, step_size=None):
+        """
+        Run the upper confidence bound MAB selection strategy.
+
+        This is the UCB1 algorithm described in
+        https://homes.di.unimi.it/~cesabian/Pubblicazioni/ml-02.pdf
+
+        Parameters
+        ----------
+        params : None
+            For API consistency, this function can take a parameters argument,
+            but it is ignored.
+        step_size : None
+            If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
+            NOTE THAT IN MY HUMBLE OPINION THEIR IMPLEMENTATION MAKES NO SENSE.
+            THE NUMBER OF PULLS WHICH LEADS TO CONFIDENCE BOUND ISNT LINEAR ANYMORE IF YOU'RE NOT WEIGHING EACH PULL EVENLY RIGHT?
+            Algorithm 2 in https://arxiv.org/pdf/0805.3415.pdf gives an equation for UCB with a step size but honestly that shit looks complicated.
+            It also has the classic "where sigma is some appropriate constant" which is like... okay? 
+            
+        Returns
+        -------
+        int
+            Index of chosen bandit
+        """
+        # Variance_Adjusted = var(payouts) - payouts^2 + sqrt(2*ln(n_tot)/n_j)
+        # UCBtuned = j_max(payout_j + sqrt(ln(n_tot)/n_j) * min(1/4, Variance_Adjusted)
+        # note - 1/4 is the maximum of the variance adjsuted Bernoulli Random Variable Variance
+        # further note - I don't think anyone has mathematically proven that UCB Tuned is better than UCB yet
+
+        # Handle cold start. Not all bandits tested yet.
+        if True in (self.pulls < 3):
+            return np.random.choice(range(len(self.pulls)))
+        else:
+            n_tot = sum(self.pulls)
+            payouts = self.est_payouts(step_size=step_size)
+            variances = [0] * self.num_bandits
+            exploration = np.log(n_tot) / self.pulls
+            for x in sorted(set(self.choices)):
+                indices = np.where(self.choices == x)[0]
+                full_payouts = [self.payout_values[i] for i in indices]
+                variance = np.var(full_payouts)
+                variances[x] = variance
+            variances_adjusted = np.subtract(variances, [i**2 for i in payouts])
+            variances_adjusted = [i + np.sqrt(2 * exploration) for i in variances_adjusted]
+            ubctuneds = np.add(payouts,[ (exploration * min(.25, i))**0.5 for i in variances_adjusted])
+
+            return np.argmax(ubctuneds)
 
     # ###------------------------------------------------------------------####
 
@@ -343,6 +397,7 @@ class MAB(object):
             Index of bandit
         """
         # is this not the same thing as max_mean...?
+        assert(step_size!=0, "ya fucked up, what do you think a step size of 0 does?")
         if len(self.choices) < 1:
             print("slots: No trials run so far.")
             return None
@@ -383,6 +438,7 @@ class MAB(object):
         -------
         array of floats or None
         """
+        assert(step_size!=0, "ya fucked up, what do you think a step size of 0 does?")
         if len(self.choices) < 1:
             print("slots: No trials run so far.")
             return None
@@ -472,6 +528,7 @@ class MAB(object):
         payout=None,
         strategy="eps_greedy",
         step_size=None,
+        sliding_window=None,
         parameters=None,
     ):
         """
@@ -488,8 +545,10 @@ class MAB(object):
             Payout value
         strategy : string
             Name of update strategy
-        parameters : dict
-            Parameters for update strategy function
+        step_size : float
+            Between 0 and 1, percentage to move estimated payout with each new result
+        sliding_window : int
+            Greater than 1, the number of most recent trials to use when calculating results
 
         Returns
         -------
@@ -538,6 +597,10 @@ class MAB(object):
             If 'lazy' it attempts to sum it as an array and only add final product
         strategy : string
             Name of update strategy
+        step_size : float
+            Between 0 and 1, percentage to move estimated payout with each new result
+        sliding_window : int
+            Greater than 1, the number of most recent trials to use when calculating results
         parameters : dict
             Parameters for update strategy function
 
