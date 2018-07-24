@@ -152,7 +152,7 @@ class MAB(object):
             self.wins[choice] += payout
         self.pulls[choice] += 1
 
-    def run_strategy(self, strategy, parameters, step_size=None):
+    def run_strategy(self, strategy, parameters):
         """
         Run the selected strategy and retrun bandit choice.
 
@@ -169,12 +169,13 @@ class MAB(object):
             Bandit arm choice index
         """
 
-        return self.__getattribute__(strategy)(params=parameters, step_size=step_size)
+        return self.__getattribute__(strategy)(params=parameters)
 
     # ###### ----------- MAB strategies ---------------------------------------####
-    def max_mean(self):
+    def max_mean(self, params):
         """
         Pick the bandit with the current best observed proportion of winning.
+        This is literally the same thing as the best() function below but for the sake of separating strategies...
 
         Returns
         -------
@@ -182,7 +183,7 @@ class MAB(object):
             Index of chosen bandit
         """
 
-        return np.argmax(self.wins / (self.pulls + 0.1))
+        return np.argmax(est_payouts(params))
 
     def bayesian(self, params=None):
         """
@@ -200,7 +201,7 @@ class MAB(object):
         int
             Index of chosen bandit
         """
-        # yeah I'll be totally honest, I'm not sure what's going on in this one, so this one isn't getting the sliding window
+        # yeah I'll be totally honest, I'm not sure what's going on in this one, so this one isn't getting the non stationary stuff
         p_success_arms = [
             np.random.beta(self.wins[i] + 1, self.pulls[i] - self.wins[i] + 1)
             for i in range(len(self.wins))
@@ -208,7 +209,7 @@ class MAB(object):
 
         return np.array(p_success_arms).argmax()
 
-    def eps_greedy(self, params, step_size=None):
+    def eps_greedy(self, params):
         """
         Run the epsilon-greedy strategy and update self.max_mean()
 
@@ -216,15 +217,16 @@ class MAB(object):
         ----------
         Params : dict
             Epsilon
-        step_size : None
-            If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
-            
+            step_size : None
+                If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
+            sliding_window : None
+                sliding_window just means that you're only using the last x results to do all future calculations. 
         Returns
         -------
         int
             Index of chosen bandit
         """
-
+        # I'm sure it's theoretically possible to overlap sliding window and step size but that seems like real math so...
         if params and type(params) == dict:
             eps = params.get("epsilon")
         else:
@@ -234,12 +236,12 @@ class MAB(object):
 
         if r < eps:
             return np.random.choice(
-                list(set(range(len(self.wins))) - {self.best(step_size=step_size)})
+                list(set(range(len(self.wins))) - {self.best(params)})
             )
         else:
-            return self.best(step_size=step_size)
+            return self.best(params)
 
-    def softmax(self, params, step_size=None):
+    def softmax(self, params):
         """
         Run the softmax selection strategy.
 
@@ -247,9 +249,10 @@ class MAB(object):
         ----------
         Params : dict
             Tau
-        step_size : None
-            If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
-            
+            step_size : None
+                If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
+            sliding_window : None
+                sliding_window just means that you're only using the last x results to do all future calculations. 
         Returns
         -------
         int
@@ -272,7 +275,7 @@ class MAB(object):
         if True in (self.pulls < 3):
             return np.random.choice(range(len(self.pulls)))
         else:
-            payouts = self.est_payouts(step_size=step_size)
+            payouts = self.est_payouts(params)
             norm = sum(np.exp(payouts / tau))
 
         ps = np.exp(payouts / tau) / norm
@@ -294,7 +297,64 @@ class MAB(object):
 
         return found_i
 
-    def ucb(self, params=None, step_size=None):
+    def ucb(self, parameters):
+        """
+        Run the upper confidence bound MAB selection strategy.
+
+        This is the UCB1 algorithm described in
+        https://homes.di.unimi.it/~cesabian/Pubblicazioni/ml-02.pdf
+
+        Parameters
+        ----------
+        params : 
+            step_size : float
+                If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
+                NOTE THAT IN MY HUMBLE OPINION THEIR IMPLEMENTATION MAKES NO SENSE.
+                THE NUMBER OF PULLS WHICH LEADS TO CONFIDENCE BOUND ISNT LINEAR ANYMORE IF YOU'RE NOT WEIGHING EACH PULL EVENLY RIGHT?
+                Algorithm 2 in https://arxiv.org/pdf/0805.3415.pdf gives an equation for UCB with a step size but honestly that shit looks complicated.
+                It also has the classic "where sigma is some appropriate constant" which is like... okay? 
+            sliding_window: int
+                Greater than 1, the number of most recent trials to use when calculating results
+            
+        Returns
+        -------
+        int
+            Index of chosen bandit
+        """
+
+        # UCB = j_max(payout_j + sqrt(2ln(n_tot)/n_j))
+
+        # Handle cold start. Not all bandits tested yet.
+
+        if params and type(params) == dict:
+            sliding_window = params.get("sliding_window")
+
+        if sliding_window:
+            choices = self.choices[-sliding_window:]
+            payout_values = self.payout_values[-sliding_window:]
+            wins = [0] * self.num_bandits
+            pulls = [0] * self.num_bandits
+            for x in sorted(set(choices)):
+                indices = np.where(choices == x)[0]
+                payouts = [payout_values[i] for i in indices]
+                wins[x] = np.sum(payouts)
+                pulls[x] = len(payouts)
+        else:
+            choices = self.choices
+            payout_values = self.payout_values
+            wins = self.wins
+            pulls = self.pulls
+
+        if True in (self.pulls < 3):
+            return np.random.choice(range(len(self.pulls)))
+        else:
+            n_tot = sum(pulls)
+            payouts = self.est_payouts(params)
+            ubcs = payouts + np.sqrt(2 * np.log(n_tot) / pulls)
+
+            return np.argmax(ubcs)
+
+    def ucbtuned(self, parameters):
         """
         Run the upper confidence bound MAB selection strategy.
 
@@ -308,28 +368,68 @@ class MAB(object):
             but it is ignored.
         step_size : None
             If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
+            NOTE THAT IN MY HUMBLE OPINION THEIR IMPLEMENTATION MAKES NO SENSE.
+            THE NUMBER OF PULLS WHICH LEADS TO CONFIDENCE BOUND ISNT LINEAR ANYMORE IF YOU'RE NOT WEIGHING EACH PULL EVENLY RIGHT?
+            Algorithm 2 in https://arxiv.org/pdf/0805.3415.pdf gives an equation for UCB with a step size but honestly that shit looks complicated.
+            It also has the classic "where sigma is some appropriate constant" which is like... okay? 
             
         Returns
         -------
         int
             Index of chosen bandit
         """
-
-        # UCB = j_max(payout_j + sqrt(2ln(n_tot)/n_j))
+        # Variance_Adjusted = var(payouts) - payouts^2 + sqrt(2*ln(n_tot)/n_j)
+        # UCBtuned = j_max(payout_j + sqrt(ln(n_tot)/n_j) * min(1/4, Variance_Adjusted)
+        # note - 1/4 is the maximum of the variance adjsuted Bernoulli Random Variable Variance
+        # further note - I don't think anyone has mathematically proven that UCB Tuned is better than UCB yet. It's been 16 years.
 
         # Handle cold start. Not all bandits tested yet.
+
+        if params and type(params) == dict:
+            sliding_window = params.get("sliding_window")
+
+        if sliding_window:
+            choices = self.choices[-sliding_window:]
+            payout_values = self.payout_values[-sliding_window:]
+            wins = [0] * self.num_bandits
+            pulls = [0] * self.num_bandits
+            for x in sorted(set(choices)):
+                indices = np.where(choices == x)[0]
+                payouts = [payout_values[i] for i in indices]
+                wins[x] = np.sum(payouts)
+                pulls[x] = len(payouts)
+        else:
+            choices = self.choices
+            payout_values = self.payout_values
+            wins = self.wins
+            pulls = self.pulls
+
         if True in (self.pulls < 3):
             return np.random.choice(range(len(self.pulls)))
         else:
-            n_tot = sum(self.pulls)
-            payouts = self.est_payouts(step_size=step_size)
-            ubcs = payouts + np.sqrt(2 * np.log(n_tot) / self.pulls)
+            n_tot = sum(pulls)
+            payouts = self.est_payouts(params)
+            variances = [0] * self.num_bandits
+            exploration = np.log(n_tot) / pulls
+            for x in sorted(set(choices)):
+                indices = np.where(choices == x)[0]
+                full_payouts = [payout_values[i] for i in indices]
+                variance = np.var(full_payouts)
+                variances[x] = variance
+            variances_adjusted = np.subtract(variances, [i ** 2 for i in payouts])
+            variances_adjusted = [
+                i + np.sqrt(2 * exploration) for i in variances_adjusted
+            ]
+            ubctuneds = np.add(
+                payouts,
+                [(exploration * min(.25, i)) ** 0.5 for i in variances_adjusted],
+            )
 
-            return np.argmax(ubcs)
+            return np.argmax(ubctuneds)
 
     # ###------------------------------------------------------------------####
 
-    def best(self, step_size=None):
+    def best(self, parameters):
         """
         Return current 'best' choice of bandit.
         Parameters
@@ -347,7 +447,7 @@ class MAB(object):
             print("slots: No trials run so far.")
             return None
         else:
-            return np.argmax(est_payouts(step_size=step_size))
+            return np.argmax(est_payouts(parameters))
 
     def current(self):
         """
@@ -365,7 +465,7 @@ class MAB(object):
         else:
             return self.choices[-1]
 
-    def est_payouts(self, bandit=None, step_size=None):
+    def est_payouts(self, bandit=None, params):
         """
         Calculate current estimate of average payout for each bandit.
         
@@ -373,28 +473,50 @@ class MAB(object):
         ----------
         bandit : None
             If a bandit is selected, return the payout for that bandit, otherwise return all payouts. 
-        step_size : None
-            If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
-            The minimum step size is the current index. 
-            I'm not sure if the best design is to have an array of arrays corresponding to each bandit or one big one.
-            Advantage of one big one is that it keeps the total decisions made intact but I could also probably replicate it from choices + arrays.
+        parameters : dict
+            Parameters for update strategy function
+            step_size : float
+                Between 0 and 1, percentage to move estimated payout with each new result
+            sliding_window : int
+                Greater than 1, the number of most recent trials to use when calculating results
 
         Returns
         -------
         array of floats or None
         """
-        if len(self.choices) < 1:
+        if params and type(params) == dict:
+            step_size = params.get("step_size")
+        if params and type(params) == dict:
+            sliding_window = params.get("sliding_window")
+
+        if sliding_window:
+            choices = self.choices[-sliding_window:]
+            payout_values = self.payout_values[-sliding_window:]
+            wins = [0] * self.num_bandits
+            pulls = [0] * self.num_bandits
+            for x in sorted(set(choices)):
+                indices = np.where(choices == x)[0]
+                payouts = [payout_values[i] for i in indices]
+                wins[x] = np.sum(payouts)
+                pulls[x] = len(payouts)
+        else:
+            choices = self.choices
+            payout_values = self.payout_values
+            wins = self.wins
+            pulls = self.pulls
+
+        if len(choices) < 1:
             print("slots: No trials run so far.")
             return None
         else:
             if not bandit:
                 if step_size is None:
-                    return self.wins / (self.pulls + 0.1)
+                    return wins / (pulls + 0.1)
                 else:
                     est = [0] * self.num_bandits
-                    for x in sorted(set(self.choices)):
-                        indices = np.where(self.choices == x)[0]
-                        payouts = [self.payout_values[i] for i in indices]
+                    for x in sorted(set(choices)):
+                        indices = np.where(choices == x)[0]
+                        payouts = [payout_values[i] for i in indices]
                         q = 0
                         for y, z in enumerate(payouts):
                             q = q + (1 / min(step_size, y + 1)) * (z - q)
@@ -402,33 +524,41 @@ class MAB(object):
                     return est
             else:
                 if step_size is None:
-                    return self.wins / (self.pulls + 0.1)[bandit]
+                    return wins / (pulls + 0.1)[bandit]
                 else:
-                    indices = np.where(self.choices == bandit)[0]
-                    payouts = [self.payout_values[i] for i in indices]
+                    indices = np.where(choices == bandit)[0]
+                    payouts = [payout_values[i] for i in indices]
                     q = 0
                     for y, z in enumerate(payouts):
                         q = q + (1 / min(step_size, y + 1)) * (z - q)
                     return q
 
-    def regret(self, step_size=None):
+    def regret(self, params):
         """
         Calculate expected regret, where expected regret is
         maximum optimal reward - sum of collected rewards, i.e.
 
         expected regret = T*max_k(mean_k) - sum_(t=1-->T) (reward_t)
         
-        It's hard to calculate regret with a sliding scale because 
-        the max optimal reward is constantly changing, putting that off for now.
+        I'm going to level with you, regret with non stationary bandits seems impossible.
+        Read https://arxiv.org/abs/1405.3316 if you want to know more about it
         
+        Parameters
+        ----------
+        parameters : dict
+            Parameters for update strategy function
+            step_size : float
+                Between 0 and 1, percentage to move estimated payout with each new result
+            sliding_window : int
+                Greater than 1, the number of most recent trials to use when calculating results
+
         Returns
         -------
         float
         """
 
         return (
-            sum(self.pulls) * np.max(np.nan_to_num(self.wins / self.pulls))
-            - sum(self.wins)
+            sum(self.pulls) * np.max(est_payouts(parameters)) - sum(self.wins)
         ) / sum(self.pulls)
 
     def crit_met(self):
@@ -467,12 +597,7 @@ class MAB(object):
 
     # ## ------------ Online bandit testing ------------------------------ ####
     def online_trial(
-        self,
-        bandit=None,
-        payout=None,
-        strategy="eps_greedy",
-        step_size=None,
-        parameters=None,
+        self, bandit=None, payout=None, strategy="eps_greedy", parameters=None
     ):
         """
         Update the bandits with the results of the previous live, online trial.
@@ -488,8 +613,10 @@ class MAB(object):
             Payout value
         strategy : string
             Name of update strategy
-        parameters : dict
-            Parameters for update strategy function
+        step_size : float
+            Between 0 and 1, percentage to move estimated payout with each new result
+        sliding_window : int
+            Greater than 1, the number of most recent trials to use when calculating results
 
         Returns
         -------
@@ -509,7 +636,7 @@ class MAB(object):
         else:
             return {
                 "new_trial": True,
-                "choice": self.run_strategy(strategy, parameters, step_size=step_size),
+                "choice": self.run_strategy(strategy, parameters),
                 "best": self.best(),
             }
 
@@ -535,17 +662,43 @@ class MAB(object):
         method : string
             Name of summing strategy 
             If 'hard' then it manually iterates over each row 
-            If 'lazy' it attempts to sum it as an array and only add final product
+            If 'lazy' it attempts to sum it as an array and only adds the final product
         strategy : string
             Name of update strategy
         parameters : dict
             Parameters for update strategy function
+            step_size : float
+                Between 0 and 1, percentage to move estimated payout with each new result
+            sliding_window : int
+                Greater than 1, the number of most recent trials to use when calculating results
 
         Returns
         -------
         dict
             Format: {'new_trial': boolean, 'choice': int, 'best': int}
         """
+        if parameters and type(parameters) == dict:
+            step_size = parameters.get("step_size")
+            assert (
+                step_size != 0,
+                "ya fucked up, what do you think a step size of 0 does?",
+            )
+            assert (
+                step_size < 1,
+                "I can't see why this would be mathematically useful, but in case it is, just comment out this assert",
+            )
+            sliding_window = parameters.get("sliding_window")
+            assert (sliding_window != 0, "please don't do this")
+            if sliding_window and np.ceil(sliding_window) - sliding_window != 0:
+                print(
+                    "I'm rounding this shit for you down, this should really be an integer"
+                )
+                sliding_window = int(sliding_window)
+            if sliding_window and step_size:
+                print(
+                    "there's no math reason why this should possibly work and I don't believe it makes conceptual sense but you're welcome to try. See docs for how it interacts."
+                )
+
         bandits = bandits.values
         payouts = payouts.values
         if len(payouts) != len(bandits):
@@ -602,9 +755,17 @@ class MAB(object):
         self.wins[bandit] += payout
         self.bandits.payouts[bandit] += payout
 
-    def info(self):
+    def info(self, parameters):
         """
         Default: display number of bandits, wins, and estimated probabilities
+        Parameters
+        ----------
+        parameters : dict
+            Parameters for estimated payouts function
+            step_size : float
+                Between 0 and 1, percentage to move estimated payout with each new result
+            sliding_window : int
+                Greater than 1, the number of most recent trials to use when calculating results
         """
         return (
             "number of bandits:",
@@ -612,7 +773,7 @@ class MAB(object):
             "number of wins:",
             self.wins,
             "estimated payouts:",
-            self.est_payouts(),
+            self.est_payouts(parameters),
         )
 
 
@@ -655,7 +816,6 @@ class Bandits:
     def pull(self, i):
         """
         Return the payout from a single pull of the bandit i's arm.
-
         Parameters
         ----------
         i : int

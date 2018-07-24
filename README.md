@@ -76,7 +76,7 @@ b.bandits.probs
 > [0.8020877268854065, 0.7185844454955193, 0.16348877912363646]
 ```
 
-By default, slots uses the epsilon greedy strategy. Besides epsilon greedy, the softmax, upper confidence bound (UCB1), and Bayesian bandit strategies are also implemented.
+By default, slots uses the epsilon greedy strategy. Besides epsilon greedy, the softmax, upper confidence bound (UCB1), UCB Tuned, and Bayesian bandit strategies are also implemented.
 
 #### Regret analysis
 A common metric used to evaluate the relative success of a MAB strategy is "regret". This reflects that fraction of payouts (wins) that have been lost by using the sequence of pulls versus the currently best known arm. The current regret value can be calculated by calling the `mab.regret()` method.
@@ -136,9 +136,9 @@ a = [1, 1 ,2]
 b = [3, 4, 1]
 e=pd.DataFrame({'a':a, 'b':b}) 
 
-s['mab'] = slots.MAB(4)
+s = slots.MAB(4)
 
-s['mab'].multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy')
+s.multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy')
 
 {'best': 1, 'choice': 1, 'new_trial': False}
 
@@ -149,9 +149,17 @@ s['mab'].multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy')
 ### Non-Stationary Bandit 
 One problem with the simplified MAB implementation is that it doesn't account for changing conditions. To steal an explanation from https://github.com/dquail/NonStationaryBandit: 
 
-```If the environment was completely stationary (the slot machine didn't change it's best arm as the evening went on, solving the bandit problem at the casino would be simple. The estimate of the arm would simply be the average of the returns received from pulling that arm. This would work fantastic. But imagine, if as the clock struck midnight, suddenly the previous "best" arm became the worst because of some internal code in the slot machine. If all you were doing was calculating the average of returns, and you'd been playing all night, it would take quite some time to learn that this was no longer the best action to take. Therefore, it is often best to weight recent events more highly than past ones in a "what have you done for me lately" sense. Setting a constant step size accomplishes this. Mathematically, the step size, tells the agent how close to move it's estimate, to the new reward. If the step size is 0.1, the agent move's it's estimate 10% of the way closer to the new reward seen. If the step size is 1.0, the agent moves all the way to the new reward, essentially ignoring past behavior. Clearly this is a balance.```
+```If the environment was completely stationary (the slot machine didn't change it's best arm as the evening went on, solving the bandit problem at the casino would be simple. The estimate of the arm would simply be the average of the returns received from pulling that arm. This would work fantastic. But imagine, if as the clock struck midnight, suddenly the previous "best" arm became the worst because of some internal code in the slot machine. If all you were doing was calculating the average of returns, and you'd been playing all night, it would take quite some time to learn that this was no longer the best action to take. Therefore, it is often best to weight recent events more highly than past ones in a "what have you done for me lately" sense. 
+```
+Slots presents two options for handling this, both of which aren't great. 
+
+The first is 'step_size'. Mathematically, the step size, tells the agent how close to move it's estimate, to the new reward. If the step size is 0.1, the agent move's it's estimate 10% of the way closer to the new reward seen. If the step size is 1.0, the agent moves all the way to the new reward, essentially ignoring past behavior. Clearly this is a balance.
 
 We add a 'step_size' parameter where applicable. If a step size is chosen, the minimum step size is the number of payouts iterated through so far. (If you look at the math, setting step size to number of payouts iterated through is the same thing as just taking the average.) To me, it makes no sense that a sliding step size designed to move the average around quickly would contribute less of a shift than simply averaging it in the beginning. 
+
+The second option is 'sliding_window'. Basically you just specify how many trials you want to use and the library just takes that number of trials from the end.
+
+As you can imagine, these have some weird interactions with any method that uses the number of trials. The theory and literature on those isn't conclusive. Be careful. I've also set an error if you try and use the two of them at the same time instead of argparsing it so you can only pick one because there might be situations where you would want both... I can't guarantee the math on that though. 
 
 
 ```Python
@@ -160,26 +168,31 @@ a = [1, 1, 2, 1, 4, 1, 1]
 b = [3, 4, 1, 4, 2, 3, 3]
 e=pd.DataFrame({'a':a, 'b':b}) 
 
-s['mab'] = slots.MAB(4)
-s['mab'].multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy', step_size = 0.5)
+s = slots.MAB(4)
+s.multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy', parameters={"step_size":0.5})
 
 {'best': 1, 'choice': 1, 'new_trial': False}
 
-s['mab'].est_payouts(step_size = 0.5)
+s.est_payouts(params={"step_size":0.5})
 
 {3.1875, 1, 0, 2}
 
+s.est_payouts(params={"sliding_window" = 4})
 
-s['mab'].est_payouts()
+{3.3333333, 0, 0, 2}
+
+s.est_payouts()
 
 {3.4, 1, 0, 2}
 
 ```
     
-Honestly, this part is a little janky because you're specifying whether or not to use the step_size parameter each time instead of instantiating the MAB with a step_size. I liked the control, but you might not. 
+Honestly, this part is a little janky because you're specifying whether or not to use the step_size/sliding window parameter each time instead of instantiating the MAB with a step_size/sliding window. I liked the control, but you might not. 
 
 Currently Bayesian bandit doesn't support step size because I don't fully get the math behind it yet. 
 Regret seems complicated and I'm not sure how to calculate it with a non-stationary bandit.(https://arxiv.org/abs/1405.3316) Seriously, what is this garbage? I've spoken to the authors and this still doesn't make any sense. If you can do this math, hit my DM. 
+
+Softmax doesn't have the time window stuff because its a shitty bandit strategy. 
 
 ### API documentation
 For documentation on the slots API, see [slots-docs.md](https://github.com/Chryzanthemum/slots/blob/master/docs/slots-docs.md).
