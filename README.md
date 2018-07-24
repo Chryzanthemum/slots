@@ -136,9 +136,9 @@ a = [1, 1 ,2]
 b = [3, 4, 1]
 e=pd.DataFrame({'a':a, 'b':b}) 
 
-s['mab'] = slots.MAB(4)
+s = slots.MAB(4)
 
-s['mab'].multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy')
+s.multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy')
 
 {'best': 1, 'choice': 1, 'new_trial': False}
 
@@ -168,20 +168,20 @@ a = [1, 1, 2, 1, 4, 1, 1]
 b = [3, 4, 1, 4, 2, 3, 3]
 e=pd.DataFrame({'a':a, 'b':b}) 
 
-s['mab'] = slots.MAB(4)
-s['mab'].multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy', step_size = 0.5)
+s = slots.MAB(4)
+s.multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy', parameters={"step_size":0.5})
 
 {'best': 1, 'choice': 1, 'new_trial': False}
 
-s['mab'].est_payouts(step_size = 0.5)
+s.est_payouts(params={"step_size":0.5})
 
 {3.1875, 1, 0, 2}
 
-s['mab'].est_payouts(sliding_window = 4)
+s.est_payouts(params={"sliding_window" = 4})
 
 {3.3333333, 0, 0, 2}
 
-s['mab'].est_payouts()
+s.est_payouts()
 
 {3.4, 1, 0, 2}
 
@@ -191,6 +191,8 @@ Honestly, this part is a little janky because you're specifying whether or not t
 
 Currently Bayesian bandit doesn't support step size because I don't fully get the math behind it yet. 
 Regret seems complicated and I'm not sure how to calculate it with a non-stationary bandit.(https://arxiv.org/abs/1405.3316) Seriously, what is this garbage? I've spoken to the authors and this still doesn't make any sense. If you can do this math, hit my DM. 
+
+Softmax doesn't have the time window stuff because its a shitty bandit strategy. 
 
 ### API documentation
 For documentation on the slots API, see [slots-docs.md](https://github.com/Chryzanthemum/slots/blob/master/docs/slots-docs.md).
