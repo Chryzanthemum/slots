@@ -106,6 +106,7 @@ class MAB(object):
             - Epsilon-greedy ("eps_greedy")
             - Softmax ("softmax")
             - Upper confidence bound ("ucb")
+            - Upper confidence bound tuned ("ucbtuned")
 
         Returns
         -------
@@ -363,15 +364,15 @@ class MAB(object):
 
         Parameters
         ----------
-        params : None
-            For API consistency, this function can take a parameters argument,
-            but it is ignored.
-        step_size : None
-            If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
-            NOTE THAT IN MY HUMBLE OPINION THEIR IMPLEMENTATION MAKES NO SENSE.
-            THE NUMBER OF PULLS WHICH LEADS TO CONFIDENCE BOUND ISNT LINEAR ANYMORE IF YOU'RE NOT WEIGHING EACH PULL EVENLY RIGHT?
-            Algorithm 2 in https://arxiv.org/pdf/0805.3415.pdf gives an equation for UCB with a step size but honestly that shit looks complicated.
-            It also has the classic "where sigma is some appropriate constant" which is like... okay? 
+        params : 
+            step_size : float
+                If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
+                NOTE THAT IN MY HUMBLE OPINION THEIR IMPLEMENTATION MAKES NO SENSE.
+                THE NUMBER OF PULLS WHICH LEADS TO CONFIDENCE BOUND ISNT LINEAR ANYMORE IF YOU'RE NOT WEIGHING EACH PULL EVENLY RIGHT?
+                Algorithm 2 in https://arxiv.org/pdf/0805.3415.pdf gives an equation for UCB with a step size but honestly that shit looks complicated.
+                It also has the classic "where sigma is some appropriate constant" which is like... okay? 
+            sliding_window: int
+                Greater than 1, the number of most recent trials to use when calculating results
             
         Returns
         -------
@@ -380,7 +381,7 @@ class MAB(object):
         """
         # Variance_Adjusted = var(payouts) - payouts^2 + sqrt(2*ln(n_tot)/n_j)
         # UCBtuned = j_max(payout_j + sqrt(ln(n_tot)/n_j) * min(1/4, Variance_Adjusted)
-        # note - 1/4 is the maximum of the variance adjsuted Bernoulli Random Variable Variance
+        # note - 1/4 is the maximum of the variance adjusted Bernoulli Random Variable Variance
         # further note - I don't think anyone has mathematically proven that UCB Tuned is better than UCB yet. It's been 16 years.
 
         # Handle cold start. Not all bandits tested yet.
@@ -434,9 +435,11 @@ class MAB(object):
         Return current 'best' choice of bandit.
         Parameters
         ----------
-        step_size : None
-            If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandit
-            
+        params : 
+            step_size : float
+                If a step_size is selected, we're using the sliding step size detailed in https://github.com/dquail/NonStationaryBandi
+            sliding_window: int
+                Greater than 1, the number of most recent trials to use when calculating results
         Returns
         -------
         int
