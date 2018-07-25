@@ -149,7 +149,13 @@ s.multiple_trials(bandits=e['a'], payouts=e['b'], method='lazy')
 ### Non-Stationary Bandit 
 One problem with the simplified MAB implementation is that it doesn't account for changing conditions. To steal an explanation from https://github.com/dquail/NonStationaryBandit: 
 
-```If the environment was completely stationary (the slot machine didn't change it's best arm as the evening went on, solving the bandit problem at the casino would be simple. The estimate of the arm would simply be the average of the returns received from pulling that arm. This would work fantastic. But imagine, if as the clock struck midnight, suddenly the previous "best" arm became the worst because of some internal code in the slot machine. If all you were doing was calculating the average of returns, and you'd been playing all night, it would take quite some time to learn that this was no longer the best action to take. Therefore, it is often best to weight recent events more highly than past ones in a "what have you done for me lately" sense. 
+```
+If the environment was completely stationary (the slot machine didn't change it's best arm as the evening went on, solving the bandit problem at the casino would be simple. 
+The estimate of the arm would simply be the average of the returns received from pulling that arm. 
+This would work fantastic. 
+But imagine, if as the clock struck midnight, suddenly the previous "best" arm became the worst because of some internal code in the slot machine. 
+If all you were doing was calculating the average of returns, and you'd been playing all night, it would take quite some time to learn that this was no longer the best action to take. 
+Therefore, it is often best to weight recent events more highly than past ones in a "what have you done for me lately" sense. 
 ```
 Slots presents two options for handling this, both of which aren't great. 
 
