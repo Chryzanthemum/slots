@@ -316,6 +316,8 @@ class MAB(object):
                 It also has the classic "where sigma is some appropriate constant" which is like... okay? 
             sliding_window: int
                 Greater than 1, the number of most recent trials to use when calculating results
+            sigma: int
+                The classic "choose constant as appropriate". Defaults to 2 because that's what it is in most literature.                
             
         Returns
         -------
@@ -323,12 +325,15 @@ class MAB(object):
             Index of chosen bandit
         """
 
-        # UCB = j_max(payout_j + sqrt(2ln(n_tot)/n_j))
+        # UCB = j_max(payout_j + sqrt(sigma*ln(n_tot)/n_j))
 
         # Handle cold start. Not all bandits tested yet.
-
+        
         if params and type(params) == dict:
             sliding_window = params.get("sliding_window")
+
+        if params and type(params) == dict:
+            sigma = params.get("sigma")
 
         if sliding_window:
             choices = self.choices[-sliding_window:]
@@ -351,8 +356,10 @@ class MAB(object):
         else:
             n_tot = sum(pulls)
             payouts = self.est_payouts(params)
-            ubcs = payouts + np.sqrt(2 * np.log(n_tot) / pulls)
-
+            if sigma:
+                ubcs = payouts + np.sqrt(sigma * np.log(n_tot) / pulls)
+            else:
+                ubcs = payouts + np.sqrt(2 * np.log(n_tot) / pulls)
             return np.argmax(ubcs)
 
     def ucbtuned(self, parameters):
@@ -373,6 +380,8 @@ class MAB(object):
                 It also has the classic "where sigma is some appropriate constant" which is like... okay? 
             sliding_window: int
                 Greater than 1, the number of most recent trials to use when calculating results
+            sigma: int
+                The classic "choose constant as appropriate". Defaults to 2 because that's what it is in most literature.                
             
         Returns
         -------
@@ -388,6 +397,9 @@ class MAB(object):
 
         if params and type(params) == dict:
             sliding_window = params.get("sliding_window")
+        
+        if params and type(params) == dict:
+            sigma = params.get("sigma")
 
         if sliding_window:
             choices = self.choices[-sliding_window:]
@@ -418,9 +430,14 @@ class MAB(object):
                 variance = np.var(full_payouts)
                 variances[x] = variance
             variances_adjusted = np.subtract(variances, [i ** 2 for i in payouts])
-            variances_adjusted = [
-                i + np.sqrt(2 * exploration) for i in variances_adjusted
-            ]
+            if sigma:
+                variances_adjusted = [
+                    i + np.sqrt(sigma * exploration) for i in variances_adjusted
+                ]
+            else:
+                variances_adjusted = [
+                    i + np.sqrt(2 * exploration) for i in variances_adjusted
+                ]
             ubctuneds = np.add(
                 payouts,
                 [(exploration * min(.25, i)) ** 0.5 for i in variances_adjusted],
